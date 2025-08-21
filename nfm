@@ -77,6 +77,182 @@ die() {
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "You need '$1' installed."; }
 
+# ONE-TIME dependency check
+_have() { command -v "$1" >/dev/null 2>&1; }
+
+# Detect distro / package manager and Nix
+_detect_pkg_targets() {
+  DETECTED="unknown"
+  HAS_NIX=0
+
+  # Check if Nix is available regardless of the distro
+  if command -v nix >/dev/null 2>&1; then HAS_NIX=1; fi
+
+  # Read /etc/os-release to get ID and ID_LIKE when available
+  if [ -r /etc/os-release ]; then . /etc/os-release; fi
+  local id="${ID:-}" like="${ID_LIKE:-}"
+
+  # Heuristics by package manager commands and os-release IDs
+  if command -v pacman >/dev/null 2>&1 || [[ "$id" =~ (arch|artix) || "$like" =~ arch ]]; then
+    DETECTED="arch"
+  elif command -v dnf >/dev/null 2>&1 || [[ "$id" =~ fedora || "$like" =~ (fedora|rhel|centos) ]]; then
+    DETECTED="fedora"
+  elif command -v apt >/dev/null 2>&1 || command -v apt-get >/dev/null 2>&1 ||
+    [[ "$id" =~ (debian|ubuntu|linuxmint|pop) || "$like" =~ (debian|ubuntu) ]]; then
+    DETECTED="debian"
+  elif [[ "$id" = "nixos" ]]; then
+    DETECTED="nixos"
+  fi
+}
+
+# Remove duplicates while preserving order; prints space-separated list
+_join_unique() {
+  declare -A seen=()
+  local out=() x
+  for x in "$@"; do
+    [[ -n "$x" && -z "${seen[$x]:-}" ]] && {
+      out+=("$x")
+      seen["$x"]=1
+    }
+  done
+  printf '%s' "${out[*]}"
+}
+
+# OS-specific install help (with Nix when available)
+# Arguments: list of missing deps (e.g., fzf unzip fc-cache curl|wget)
+# Prints colored, distro-appropriate install commands; exits is handled by caller.
+_print_install_help() {
+  local missing=("$@")
+
+  # Build per-distro package/attribute lists
+  local apt_pkgs=() dnf_pkgs=() pac_pkgs=() nix_attrs=()
+
+  for m in "${missing[@]}"; do
+    case "$m" in
+    fzf)
+      apt_pkgs+=("fzf")
+      dnf_pkgs+=("fzf")
+      pac_pkgs+=("fzf")
+      nix_attrs+=("fzf")
+      ;;
+    unzip)
+      apt_pkgs+=("unzip")
+      dnf_pkgs+=("unzip")
+      pac_pkgs+=("unzip")
+      nix_attrs+=("unzip")
+      ;;
+    fc-cache)
+      # fc-cache is provided by fontconfig
+      apt_pkgs+=("fontconfig")
+      dnf_pkgs+=("fontconfig")
+      pac_pkgs+=("fontconfig")
+      nix_attrs+=("fontconfig")
+      ;;
+    curl\|wget | curl | wget)
+      # You only need one; show both so the user can choose
+      apt_pkgs+=("curl" "wget")
+      dnf_pkgs+=("curl" "wget")
+      pac_pkgs+=("curl" "wget")
+      nix_attrs+=("curl" "wget")
+      ;;
+    *)
+      apt_pkgs+=("$m")
+      dnf_pkgs+=("$m")
+      pac_pkgs+=("$m")
+      nix_attrs+=("$m")
+      ;;
+    esac
+  done
+
+  # Deduplicate each list
+  local apt_line dnf_line pac_line nix_line
+  apt_line="$(_join_unique "${apt_pkgs[@]}")"
+  dnf_line="$(_join_unique "${dnf_pkgs[@]}")"
+  pac_line="$(_join_unique "${pac_pkgs[@]}")"
+  nix_line="$(_join_unique "${nix_attrs[@]}")"
+
+  # Build nix profile refs (nixpkgs#attr)
+  local nix_refs=() a
+  for a in $nix_line; do nix_refs+=("nixpkgs#$a"); done
+
+  # Detect platform and Nix presence
+  _detect_pkg_targets
+
+  printf '%s\n' "${RED}${BOLD}Missing dependencies:${RESET} ${missing[*]}" >&2
+  echo >&2
+
+  # Show Nix if available (either on NixOS or any system with nix in PATH)
+  if [ "$HAS_NIX" -eq 1 ] || [ "$DETECTED" = "nixos" ]; then
+    printf '%s\n' "${BOLD}Nix/NixOS${RESET} ${DIM}(detected)${RESET}:" >&2
+    printf '  %b\n' "${GREEN}nix profile install ${nix_refs[*]}${RESET}" >&2
+    echo >&2
+  fi
+
+  # Show only the detected distro; if unknown, show the three common ones
+  case "$DETECTED" in
+  debian)
+    printf '%s\n' "${BOLD}Debian/Ubuntu${RESET} ${DIM}(detected)${RESET}:" >&2
+    printf '  %b\n' "${GREEN}sudo apt update && sudo apt install -y ${apt_line}${RESET}" >&2
+    ;;
+  fedora)
+    printf '%s\n' "${BOLD}Fedora${RESET} ${DIM}(detected)${RESET}:" >&2
+    printf '  %b\n' "${GREEN}sudo dnf install -y ${dnf_line}${RESET}" >&2
+    ;;
+  arch)
+    printf '%s\n' "${BOLD}Arch Linux${RESET} ${DIM}(detected)${RESET}:" >&2
+    printf '  %b\n' "${GREEN}sudo pacman -Syu --needed ${pac_line}${RESET}" >&2
+    ;;
+  nixos)
+    # Nix command already shown above; no extra system package step
+    :
+    ;;
+  *)
+    # Unknown distro: show generic instructions for the three main families
+    printf '%s\n' "${BOLD}Debian/Ubuntu${RESET}:" >&2
+    printf '  %b\n' "${GREEN}sudo apt update && sudo apt install -y ${apt_line}${RESET}" >&2
+    echo >&2
+    printf '%s\n' "${BOLD}Fedora${RESET}:" >&2
+    printf '  %b\n' "${GREEN}sudo dnf install -y ${dnf_line}${RESET}" >&2
+    echo >&2
+    printf '%s\n' "${BOLD}Arch Linux${RESET}:" >&2
+    printf '  %b\n' "${GREEN}sudo pacman -Syu --needed ${pac_line}${RESET}" >&2
+    ;;
+  esac
+
+  # Hint when curl|wget is in the missing list
+  if printf '%s\n' "${missing[@]}" | grep -q 'curl|wget'; then
+    echo >&2
+    printf '%s\n' "${DIM}Note: you only need one of 'curl' or 'wget'.${RESET}" >&2
+  fi
+}
+
+preflight_check() {
+  # Full set so se comprueban siempre independientemente de la opción
+  local required=(fzf unzip fc-cache curl\|wget)
+  local missing=()
+  for dep in "${required[@]}"; do
+    case "$dep" in
+    curl\|wget) (_have curl || _have wget) || missing+=("curl|wget") ;;
+    *) _have "$dep" || missing+=("$dep") ;;
+    esac
+  done
+  if ((${#missing[@]})); then
+    _print_install_help "${missing[@]}"
+    exit 1
+  fi
+}
+
+# Decide downloader (after preflight guarantees at least one)
+set_downloader() {
+  if command -v curl >/dev/null 2>&1; then
+    DL='curl -s -OL'
+  elif command -v wget >/dev/null 2>&1; then
+    DL='wget -q'
+  else
+    die "No downloader found (curl/wget)."
+  fi
+}
+
 # Help functions
 help_global() {
   cat <<EOF
@@ -95,7 +271,7 @@ ${BOLD}Global options${RESET}:
 
 ${BOLD}Notes${RESET}:
   • Fonts directory: \$NERDFONTS_DIR ${DIM}(default: ${HOME}/.fonts)${RESET}
-  • Dependencies: fzf, unzip, and curl or wget to install; fc-cache to refresh cache
+  • Dependencies: All fonts are downloaded from the official Nerd Fonts site ${DIM}(https://www.nerdfonts.com/font-downloads)${RESET}
 
 EOF
 }
@@ -115,7 +291,9 @@ help_install() {
 ${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
 
 ${BOLD}Usage${RESET}: $script_name install [FONT...]
-Install one or more Nerd Fonts. If no FONT names are provided, an interactive fzf picker opens.
+Install one or more Nerd Fonts. If no FONT names are provided, an interactive fzf picker opens
+Fonts are downloaded from the official Nerd Fonts site ${DIM}(https://www.nerdfonts.com/font-downloads)${RESET}
+
 
 ${BOLD}Examples${RESET}:
   ${GREEN}$script_name install                    ${RESET}Open fzf and select fonts
@@ -129,7 +307,7 @@ help_uninstall() {
 ${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
 
 ${BOLD}Usage${RESET}: $script_name uninstall [FONT...]
-Uninstall one or more Nerd Fonts. If no names are provided, an interactive fzf picker opens.
+Uninstall one or more Nerd Fonts. If no names are provided, an interactive fzf picker opens
 
 ${BOLD}Examples${RESET}:
   ${GREEN}$script_name uninstall            ${RESET}Open fzf and select installed fonts
@@ -273,6 +451,9 @@ uninstall_fonts() {
 }
 
 # Parse command-line arguments
+# Preflight: comprobar dependencias UNA SOLA VEZ al inicio
+preflight_check
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then
   help_global
   exit 0
@@ -294,7 +475,7 @@ uninstall | u) uninstall_fonts "$@" ;;
 *)
   echo "Unknown command: $cmd"
   echo
-  echo "Use ${BOLD}${RED}$script_name --help${RESET} for usage information"
+  echo "Use ${BOLD}${RED}$script_name -h${RESET} for usage information"
   exit 2
   ;;
 esac
