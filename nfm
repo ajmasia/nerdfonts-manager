@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+# Nerd Font Manager (nfm) - CLI to manage Nerd Fonts interactively
+# Quick use:
+#   nfm -h|--help
+#   nfm -l|--list
+#   nfm -i|--install
+#   nfm -u|--uninstall
+#
+# You can change the install directory by exporting NERDFONTS_DIR.
+# Default is ~/.fonts (to keep compatibility with your original script).
+
+set -u
+
+# -------- Color support (for help output) --------
+# Detect whether stdout is a TTY and whether basic colors are available.
+supports_color() {
+  if [ -t 1 ]; then
+    if [ -n "${NO_COLOR:-}" ]; then
+      return 1
+    fi
+    if command -v tput >/dev/null 2>&1; then
+      [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ] && return 0
+    else
+      # No tput, but we are on a TTY; assume ANSI works
+      return 0
+    fi
+  fi
+  return 1
+}
+if supports_color; then
+  if command -v tput >/dev/null 2>&1; then
+    BOLD="$(tput bold)"
+    DIM="$(tput dim 2>/dev/null || printf $'\e[2m')"
+    RESET="$(tput sgr0)"
+    CYAN="$(tput setaf 6)"
+    GREEN="$(tput setaf 2)"
+    YELLOW="$(tput setaf 3)"
+  else
+    BOLD=$'\e[1m'
+    DIM=$'\e[2m'
+    RESET=$'\e[0m'
+    CYAN=$'\e[36m'
+    GREEN=$'\e[32m'
+    YELLOW=$'\e[33m'
+  fi
+else
+  BOLD=''
+  DIM=''
+  RESET=''
+  CYAN=''
+  GREEN=''
+  YELLOW=''
+fi
+
+# -------- Configuration --------
+fzf_args=(
+  --multi
+  --header=$'📝 Nerd Font Manager\n[Tab] select multiple, [Enter] confirm'
+)
+
+# Fonts directory (overridable with NERDFONTS_DIR env var)
+fonts_dir="${NERDFONTS_DIR:-$HOME/.fonts}"
+
+# List of available Nerd Fonts to offer for installation
+available_fonts=(
+  "0xProto" "3270" "AdwaitaMono" "Agave" "AnonymousPro" "Arimo"
+  "AtkinsonHyperlegibleMono" "AurulentSansMono" "BigBlueTerminal"
+  "BitstreamVeraSansMono" "BlexMono" "CascadiaMono" "CascadiaCode"
+  "CodeNewRoman" "ComicShannsMono" "CommitMono" "Cousine" "D2Coding"
+  "DaddyTimeMono" "DejaVuSansMono" "DepartureMono" "DroidSansMono"
+  "EnvyCodeR" "FantasqueSansMono" "FiraCode" "FiraMono" "GeistMono"
+  "Go-Mono" "Gohu" "Hack" "Hasklig" "HeavyData" "Hermit" "iA-Writer"
+  "Inconsolata" "InconsolataGo" "InconsolataLGC" "IntelOneMono"
+  "Iosevka" "IosevkaTerm" "IosevkaTermSlab" "JetBrainsMono" "Lekton"
+  "LiberationMono" "Lilex" "MartianMono" "Meslo" "Monaspace" "Monofur"
+  "Monoid" "Mononoki" "MPlus" "Noto" "OpenDyslexic" "Overpass"
+  "ProFont" "ProggyClean" "Recursive" "RobotoMono" "ShureTechMono"
+  "SauceCodePro" "SpaceMono" "NerdFontsSymbolsOnly" "Terminus" "Tinos"
+  "Ubuntu" "UbuntuMono" "UbuntuSans" "VictorMono" "ZedMono"
+)
+
+# -------- Utilities --------
+# Print an error and exit
+die() {
+  echo "❌ $*" >&2
+  exit 1
+}
+
+# Ensure a required command is present
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "You need '$1' installed."
+}
+
+script_name="$(basename -- "${BASH_SOURCE[0]:-$0}")"
+
+# Colored help text
+usage() {
+  cat <<EOF
+${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
+
+${BOLD}Usage${RESET}:
+  $script_name [option]
+
+${BOLD}Options${RESET}:
+  ${GREEN}-h, --help${RESET}         Show this help
+  ${GREEN}-l, --list${RESET}         List installed fonts
+  ${GREEN}-i, --install${RESET}      Install fonts (interactive with fzf)
+  ${GREEN}-u, --uninstall${RESET}    Uninstall fonts (interactive with fzf)
+
+${BOLD}Notes${RESET}:
+  • Fonts directory: \$NERDFONTS_DIR ${DIM}(default: ${HOME}/.fonts)${RESET}
+  • Dependencies: fzf, unzip, and curl or wget to install; fc-cache to refresh the cache.
+EOF
+}
+
+# List all installed font directories (one level deep)
+list_fonts() {
+  if [ ! -d "$fonts_dir" ]; then
+    echo "❌ No fonts directory found at: $fonts_dir."
+    exit 1
+  fi
+  echo "📚 Installed fonts in $fonts_dir:"
+  # NOTE: -printf is from GNU find. On BSD/macOS you can replace this with:
+  # find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sed 's/^/• /'
+  find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -printf "• ${GREEN}%f\n${RESET}"
+}
+
+# Load installed fonts into an array (silently ignore if directory is missing)
+load_installed_fonts() {
+  mapfile -t installed_fonts < <(find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -printf "%f\n" 2>/dev/null || true)
+}
+
+# Interactive installer: filters out already installed fonts, downloads zip from latest release, unzips, and refreshes cache
+install_fonts() {
+  require_cmd fzf
+  require_cmd unzip
+  if command -v curl >/dev/null 2>&1; then
+    DL='curl -s -OL'
+  elif command -v wget >/dev/null 2>&1; then
+    DL='wget -q'
+  else
+    die "Neither 'curl' nor 'wget' is installed."
+  fi
+
+  load_installed_fonts
+
+  # Build a set (associative array) of installed fonts to filter the list
+  declare -A is_installed=()
+  for f in "${installed_fonts[@]:-}"; do is_installed["$f"]=1; done
+
+  fonts_to_install=()
+  for f in "${available_fonts[@]}"; do
+    [[ -n "${is_installed[$f]:-}" ]] || fonts_to_install+=("$f")
+  done
+
+  if [ ${#fonts_to_install[@]} -eq 0 ]; then
+    echo "✅ Nothing to install. You're up to date."
+    return 0
+  fi
+
+  local selection
+  selection=$(printf "%s\n" "${fonts_to_install[@]}" |
+    fzf "${fzf_args[@]}" --header=$'⬇️ Nerd Fonts Installer\n[Tab] select, [Enter] confirm')
+
+  if [ -z "$selection" ]; then
+    echo "No font selected. Aborting."
+    return 0
+  fi
+
+  mkdir -p "$fonts_dir"
+
+  # Process each selected font
+  while IFS= read -r font_name; do
+    [ -n "$font_name" ] || continue
+    echo "🚀 Installing $font_name Nerd Font..."
+    echo "⬇️ Downloading $font_name.zip..."
+    eval $DL "\"https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip\"" || {
+      echo "⚠️ Failed to download ${font_name}.zip. Skipping..."
+      continue
+    }
+
+    echo "📦 Unzipping $font_name.zip into $fonts_dir/$font_name/"
+    mkdir -p "$fonts_dir/$font_name"
+    if ! unzip -q "$font_name.zip" -d "$fonts_dir/$font_name/"; then
+      echo "⚠️ Failed to unzip ${font_name}.zip. Removing file..."
+      rm -f "$font_name.zip"
+      continue
+    fi
+    rm -f "$font_name.zip"
+    echo "✅ $font_name installed."
+  done <<<"$selection"
+
+  echo "🔄 Refreshing font cache..."
+  if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f >/dev/null || true
+  else
+    echo "ℹ️ 'fc-cache' not found; you may need to refresh the cache manually."
+  fi
+  echo "🎉 Installation complete."
+}
+
+# Interactive uninstaller: lets the user select installed fonts and removes their directories
+uninstall_fonts() {
+  require_cmd fzf
+  if ! command -v fc-cache >/dev/null 2>&1; then
+    echo "ℹ️ 'fc-cache' not found; I will remove the fonts but cannot refresh the cache."
+  fi
+
+  if [ ! -d "$fonts_dir" ]; then
+    echo "❌ No fonts directory found at: $fonts_dir."
+    exit 1
+  fi
+
+  mapfile -t installed_fonts < <(find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -printf "%f\n")
+  if [ ${#installed_fonts[@]} -eq 0 ]; then
+    echo "❌ No installed fonts found in $fonts_dir."
+    exit 1
+  fi
+
+  local selection
+  selection=$(printf "%s\n" "${installed_fonts[@]}" |
+    fzf --multi --header=$'🗑️ Font Uninstaller\n[Tab] select, [Enter] confirm')
+
+  if [ -z "$selection" ]; then
+    echo "No font selected. Aborting."
+    return 0
+  fi
+
+  while IFS= read -r font; do
+    [ -n "$font" ] || continue
+    echo "🗑️ Removing $font from $fonts_dir..."
+    rm -rf "$fonts_dir/$font"
+  done <<<"$selection"
+
+  echo "🔄 Refreshing font cache..."
+  if command -v fc-cache >/dev/null 2>&1; then
+    fc-cache -f >/dev/null || true
+  fi
+  echo "✅ Uninstallation complete."
+}
+
+# -------- Argument parsing --------
+# Enforce one action at a time; default to help when none provided
+action=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  -h | --help)
+    [[ -n "$action" ]] && die "Only one action is allowed at a time."
+    action="help"
+    shift
+    ;;
+  -l | --list)
+    [[ -n "$action" ]] && die "Only one action is allowed at a time."
+    action="list"
+    shift
+    ;;
+  -i | --install)
+    [[ -n "$action" ]] && die "Only one action is allowed at a time."
+    action="install"
+    shift
+    ;;
+  -u | --uninstall)
+    [[ -n "$action" ]] && die "Only one action is allowed at a time."
+    action="uninstall"
+    shift
+    ;;
+  *)
+    echo "Unrecognized option: $1"
+    usage
+    exit 2
+    ;;
+  esac
+done
+
+# If no action provided, show help
+if [[ -z "${action:-}" ]]; then
+  usage
+  exit 0
+fi
+
+# -------- Execute action --------
+case "$action" in
+help) usage ;;
+list) list_fonts ;;
+install) install_fonts ;;
+uninstall) uninstall_fonts ;;
+esac
