@@ -4,6 +4,8 @@ set -euo pipefail
 GITHUB_USER="ajmasia"
 REPO="$GITHUB_USER/nerdfonts-manager"
 PREFIX="/usr/local"
+COMPL_DIR="/etc/bash_completion.d"
+COMPL_FILE="nfm"
 
 echo "📦 Installing Nerd Font Manager..."
 
@@ -26,4 +28,27 @@ sudo install -m 755 "$SRC_DIR/nfm" "$PREFIX/bin/nfm"
 sudo install -m 644 "$SRC_DIR/lib/utils.sh" "$PREFIX/share/nfm/lib/utils.sh"
 
 echo "✅ Installed to $PREFIX/bin/nfm"
+
+# Ask about completion
+echo
+read -r -p \"❓ Do you want to install bash-completion for nfm? [y/N] \" resp
+if [[ \"$resp\" =~ ^[Yy]$ ]]; then
+  if [ -d \"$COMPL_DIR\" ]; then
+    if [ -f \"$SRC_DIR/contrib/nfm-completion.bash\" ]; then
+      echo \"⚙️  Installing completion from local repo...\"
+      sudo install -m 644 \"$SRC_DIR/contrib/nfm-completion.bash\" \"$COMPL_DIR/$COMPL_FILE\"
+    else
+      echo \"⬇️  Downloading completion script...\"
+      curl -fsSL \"https://raw.githubusercontent.com/$REPO/main/contrib/nfm-completion.bash\" |
+        sudo tee \"$COMPL_DIR/$COMPL_FILE\" >/dev/null
+    fi
+    echo \"✅ Completion installed at $COMPL_DIR/$COMPL_FILE\"
+    echo \"👉 Restart your shell or run: source $COMPL_DIR/$COMPL_FILE\"
+  else
+    echo \"⚠️  bash-completion not found (missing $COMPL_DIR)\"
+  fi
+else
+  echo \"⏭️  Skipping completion installation.\"
+fi
+
 echo "👉 Run: nfm -h"
