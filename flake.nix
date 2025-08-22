@@ -11,6 +11,9 @@
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
 
+      pname = "nerdfonts-manager";
+      version = "1.3.2";
+
       # Step 1: Wrap the main script with writeShellApplication.
       # This ensures runtime dependencies (fzf, unzip, wget, curl)
       # are available in PATH when executing the binary.
@@ -32,9 +35,8 @@
     in {
       # Step 2: Combine the wrapped binary with extra files
       # (utils.sh library and bash completion).
-      packages.${system}.default = pkgs.runCommand "nerdfonts-manager-1.3.2" {
-        pname = "nerdfonts-manager";
-        version = "1.3.2";
+      packages.${system}.default = pkgs.runCommand "${pname}-${version}" {
+        inherit pname version;
 
         meta = with pkgs.lib; {
           description = "A simple Nerd Fonts manager written in Bash";
@@ -42,7 +44,6 @@
           license = licenses.mit;         # adjust if needed
           maintainers = with maintainers; [ ajmasia ]; # replace with your handle
           platforms = platforms.linux;    # restrict only to Linux
-
         };
       } ''
         mkdir -p $out
