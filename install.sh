@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-GITHUB_USER="YOUR_USER"
+GITHUB_USER="ajmasia"
 REPO="$GITHUB_USER/nerdfonts-manager"
 PREFIX="/usr/local"
 
