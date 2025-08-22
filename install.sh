@@ -29,7 +29,7 @@ sudo mkdir -p "$PREFIX/bin" "$PREFIX/share/nfm/lib"
 sudo install -m 755 "$SRC_DIR/nfm" "$PREFIX/bin/nfm"
 sudo install -m 644 "$SRC_DIR/lib/utils.sh" "$PREFIX/share/nfm/lib/utils.sh"
 
-echo "✅ Installed to $PREFIX/bin/nfm"
+echo -e "✅ Installed to $PREFIX/bin/nfm\n"
 
 # Install bash-completion (always)
 if [ -d "$COMPL_DIR" ]; then
@@ -53,5 +53,4 @@ else
   echo "⚠️  bash-completion not found (missing $COMPL_DIR)"
 fi
 
-echo
-echo "👉 Run: nfm -h to start using Nerd Font Manager"
+echo -e "\n👉 Run: nfm -h to start using Nerd Font Manager"
