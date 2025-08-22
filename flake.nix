@@ -2,54 +2,73 @@
   description = "Nerd Fonts Manager (nfm)";
 
   inputs = {
-    # Use the stable nixpkgs release
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
+    # Pin nixpkgs to unstable channel
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
   outputs = { self, nixpkgs }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
+
+      # Step 1: Wrap the main script with writeShellApplication.
+      # This ensures runtime dependencies (fzf, unzip, wget, curl)
+      # are available in PATH when executing the binary.
+      nfmBin = pkgs.writeShellApplication {
+        name = "nfm";
+        runtimeInputs = [
+          pkgs.fzf
+          pkgs.unzip
+          pkgs.wget
+          pkgs.curl
+        ];
+        # Use the local script as source
+        text = builtins.readFile ./nfm;
+
+        # Disable shellcheck here since it complains
+        # about dynamic `source` paths not being constant.
+        checkPhase = '' true '';
+      };
     in {
-      # Main package definition
-      packages.${system}.default = pkgs.stdenv.mkDerivation {
+      # Step 2: Combine the wrapped binary with extra files
+      # (utils.sh library and bash completion).
+      packages.${system}.default = pkgs.runCommand "nerdfonts-manager-1.3.2" {
         pname = "nerdfonts-manager";
         version = "1.3.2";
 
-        # Source is the current repo
-        src = ./.;
+        meta = with pkgs.lib; {
+          description = "A simple Nerd Fonts manager written in Bash";
+          homepage = "https://github.com/ajmasia/nerdfonts-manager";
+          license = licenses.mit;         # adjust if needed
+          maintainers = with maintainers; [ ajmasia ]; # replace with your handle
+          platforms = platforms.linux;    # restrict only to Linux
 
-        dontBuild = true;
+        };
+      } ''
+        mkdir -p $out
 
-        installPhase = ''
-          runHook preInstall
+        # Copy the binary produced by writeShellApplication
+        cp -r ${nfmBin}/* $out/
 
-          # Create output directories
-          mkdir -p $out/bin
-          mkdir -p $out/share/nfm/lib
-          mkdir -p $out/share/bash-completion/completions
+        # Install extra resources: utils.sh and bash completion
+        mkdir -p $out/share/nfm/lib
+        mkdir -p $out/share/bash-completion/completions
 
-          # Install main script
-          install -m755 nfm $out/bin/nfm
+        install -m644 ${./lib/utils.sh} $out/share/nfm/lib/utils.sh
+        install -m644 ${./contrib/nfm-completion.bash} \
+          $out/share/bash-completion/completions/nfm
 
-          # Install library script
-          install -m644 lib/utils.sh $out/share/nfm/lib/utils.sh
+        # Patch the script so it points to the correct utils.sh location
+        substituteInPlace $out/bin/nfm \
+          --replace '/usr/local/share/nfm/lib/utils.sh' \
+                    "$out/share/nfm/lib/utils.sh"
+      '';
 
-          # Install bash completion
-          install -m644 contrib/nfm-completion.bash $out/share/bash-completion/completions/nfm
-
-          # wrap nfm to ensure dependencies are in PATH
-          wrapProgram $out/bin/nfm \
-            --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.fzf pkgs.curl pkgs.wget pkgs.unzip ]}
-
-          runHook postInstall
-        '';
-      };
-
-      # Expose the app so you can run it via `nix run .`
+      # Step 3: Expose the package as an app so you can run it with `nix run .`
       apps.${system}.default = {
         type = "app";
         program = "${self.packages.${system}.default}/bin/nfm";
       };
     };
 }
+
