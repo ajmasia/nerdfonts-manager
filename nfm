@@ -31,12 +31,13 @@ _fonts_default() {
     printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
   fi
 }
+
 fonts_dir="${NERDFONTS_DIR:-$(_fonts_default)}"
 
 available_fonts=(
   "0xProto" "3270" "AdwaitaMono" "Agave" "AnonymousPro" "Arimo"
   "AtkinsonHyperlegibleMono" "AurulentSansMono" "BigBlueTerminal"
-  "BitstreamVeraSansMono" "BlexMono" "CascadiaMono" "CascadiaCode"
+  "BitstreamVeraSansMono" "IBMPlexMono" "CascadiaMono" "CascadiaCode"
   "CodeNewRoman" "ComicShannsMono" "CommitMono" "Cousine" "D2Coding"
   "DaddyTimeMono" "DejaVuSansMono" "DepartureMono" "DroidSansMono"
   "EnvyCodeR" "FantasqueSansMono" "FiraCode" "FiraMono" "GeistMono"
@@ -300,7 +301,10 @@ install_fonts() {
   set_downloader
   load_installed_fonts
   declare -A is_installed=()
-  for f in "${installed_fonts[@]:-}"; do is_installed["$f"]=1; done
+  for f in "${installed_fonts[@]:-}"; do
+    [ -n "$f" ] || continue
+    is_installed["$f"]=1
+  done
 
   local selection
   if [ "$#" -gt 0 ]; then
@@ -341,6 +345,7 @@ install_fonts() {
     info "⬇️  Downloading $font_name.zip..."
     if ! downloader "$url" "$zipfile"; then
       warn "Failed to download ${font_name}.zip. Skipping..."
+      echo
       continue
     fi
 
@@ -351,6 +356,7 @@ install_fonts() {
       continue
     fi
     info "✅ $font_name installed."
+    echo
   done
   rm -rf "$tmpdir"
 
