@@ -24,7 +24,7 @@ _nfm_completions() {
         LiberationMono Lilex MartianMono Meslo Monaspace Monofur \
         Monoid Mononoki MPlus Noto OpenDyslexic Overpass \
         ProFont ProggyClean Recursive RobotoMono ShureTechMono \
-        SauceCodePro SpaceMono NerdFontsSymbolsOnly Terminus Tinos \
+        SourceCodePro SpaceMono NerdFontsSymbolsOnly Terminus Tinos \
         Ubuntu UbuntuMono UbuntuSans VictorMono ZedMono"
     else
       # para uninstall listar solo las fuentes instaladas actualmente
