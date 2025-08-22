@@ -42,7 +42,7 @@ if [ -d "$COMPL_DIR" ]; then
     fi
   else
     echo "⬇️  Downloading completion script..."
-    curl -fsSL "https://raw.githubusercontent.com/$REPO/main/contrib/nfm-completion.bash" |
+    curl -fsSL "https://raw.githubusercontent.com/ajmasia/nerdfonts-manager/main/contrib/nfm-completion.bash" |
       sudo tee "$COMPL_DIR/$COMPL_FILE" >/dev/null
   fi
 
