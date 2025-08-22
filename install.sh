@@ -46,7 +46,7 @@ if [ -d "$COMPL_DIR" ]; then
       sudo tee "$COMPL_DIR/$COMPL_FILE" >/dev/null
   fi
 
-  echo "✅ Completion installed at $COMPL_DIR/$COMPL_FILE"
+  echo -e "✅ Completion installed at $COMPL_DIR/$COMPL_FILE\n"
   echo "👉 Restart your shell or run: source $COMPL_DIR/$COMPL_FILE"
   echo "ℹ️  To uninstall completion: sudo rm $COMPL_DIR/$COMPL_FILE"
 else
