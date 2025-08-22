@@ -28,6 +28,32 @@ cd nerdfonts-manager
 ./nfm -h
 ```
 
+### Using Nix (NixOS or nix profile)
+
+You can install **nfm** directly via Nix flakes:
+
+```bash
+nix profile install github:ajmasia/nerdfonts-manager
+```
+
+Run it immediately with:
+
+```bash
+nix run github:ajmasia/nerdfonts-manager -- -h
+```
+
+To update to the latest version:
+
+```bash
+nix profile upgrade github:ajmasia/nerdfonts-manager --no-write-lock-file
+```
+
+> ℹ️ If the new binary is not available right away, restart your shell or run:
+>
+> ```bash
+> source ~/.nix-profile/etc/profile.d/nix.sh
+> ```
+
 ## 🚀 Usage
 
 | Command                   | Description                                  | Example                      |
@@ -46,6 +72,12 @@ To remove Nerd Fonts Manager from your system:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ajmasia/nerdfonts-manager/main/uninstall.sh | bash
+```
+
+For Nix users:
+
+```bash
+nix profile remove github:ajmasia/nerdfonts-manager
 ```
 
 ## 📝 License
