@@ -53,4 +53,5 @@ else
   echo "⚠️  bash-completion not found (missing $COMPL_DIR)"
 fi
 
+echo
 echo "👉 Run: nfm -h to start using Nerd Font Manager"
