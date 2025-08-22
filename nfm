@@ -1,54 +1,34 @@
 #!/usr/bin/env bash
-
 set -u
 
-# Color support (for help output)
-supports_color() {
-  if [ -t 1 ]; then
-    [ -z "${NO_COLOR:-}" ] || return 1
-    if command -v tput >/dev/null 2>&1; then
-      [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ] && return 0
-    else
-      return 0
-    fi
-  fi
-  return 1
-}
+# -------------------- Resolve lib path --------------------
+SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
-if supports_color; then
-  if command -v tput >/dev/null 2>&1; then
-    BOLD="$(tput bold)"
-    DIM="$(tput dim 2>/dev/null || printf $'\e[2m')"
-    RESET="$(tput sgr0)"
-    CYAN="$(tput setaf 6)"
-    GREEN="$(tput setaf 2)"
-    YELLOW="$(tput setaf 3)"
-    RED="$(tput setaf 1)"
-  else
-    BOLD=$'\e[1m'
-    DIM=$'\e[2m'
-    RESET=$'\e[0m'
-    CYAN=$'\e[36m'
-    GREEN=$'\e[32m'
-    YELLOW=$'\e[33m'
-    RED=$'\e[31m'
-  fi
+if [ -f "$SELF_DIR/lib/utils.sh" ]; then
+  # Dev mode (ejecutando desde repo clonado)
+  . "$SELF_DIR/lib/utils.sh"
 else
-  BOLD=''
-  DIM=''
-  RESET=''
-  CYAN=''
-  GREEN=''
-  YELLOW=''
-  RED=''
+  # Installed mode
+  . "/usr/local/share/nfm/lib/utils.sh"
 fi
 
-# Config
+script_name="$(basename -- "${BASH_SOURCE[0]:-$0}")"
+
+# -------------------- Config --------------------
 fzf_args=(
   --multi
   --header=$'📝 Nerd Font Manager\n[Tab] select multiple, [Enter] confirm'
 )
-fonts_dir="${NERDFONTS_DIR:-$HOME/.fonts}"
+
+# Prefer XDG fonts dir; fall back to ~/.fonts if it exists (back-compat)
+_fonts_default() {
+  if [ -d "$HOME/.fonts" ]; then
+    printf '%s' "$HOME/.fonts"
+  else
+    printf '%s' "${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
+  fi
+}
+fonts_dir="${NERDFONTS_DIR:-$(_fonts_default)}"
 
 available_fonts=(
   "0xProto" "3270" "AdwaitaMono" "Agave" "AnonymousPro" "Arimo"
@@ -67,32 +47,15 @@ available_fonts=(
   "Ubuntu" "UbuntuMono" "UbuntuSans" "VictorMono" "ZedMono"
 )
 
-script_name="$(basename -- "${BASH_SOURCE[0]:-$0}")"
-
-# Utils
-die() {
-  echo "❌ $*" >&2
-  exit 1
-}
-
-require_cmd() { command -v "$1" >/dev/null 2>&1 || die "You need '$1' installed."; }
-
-# ONE-TIME dependency check
+# -------------------- Distro/Nix detection & install help --------------------
 _have() { command -v "$1" >/dev/null 2>&1; }
 
-# Detect distro / package manager and Nix
 _detect_pkg_targets() {
   DETECTED="unknown"
   HAS_NIX=0
-
-  # Check if Nix is available regardless of the distro
   if command -v nix >/dev/null 2>&1; then HAS_NIX=1; fi
-
-  # Read /etc/os-release to get ID and ID_LIKE when available
   if [ -r /etc/os-release ]; then . /etc/os-release; fi
   local id="${ID:-}" like="${ID_LIKE:-}"
-
-  # Heuristics by package manager commands and os-release IDs
   if command -v pacman >/dev/null 2>&1 || [[ "$id" =~ (arch|artix) || "$like" =~ arch ]]; then
     DETECTED="arch"
   elif command -v dnf >/dev/null 2>&1 || [[ "$id" =~ fedora || "$like" =~ (fedora|rhel|centos) ]]; then
@@ -105,7 +68,6 @@ _detect_pkg_targets() {
   fi
 }
 
-# Remove duplicates while preserving order; prints space-separated list
 _join_unique() {
   declare -A seen=()
   local out=() x
@@ -118,13 +80,9 @@ _join_unique() {
   printf '%s' "${out[*]}"
 }
 
-# OS-specific install help (with Nix when available)
-# Arguments: list of missing deps (e.g., fzf unzip fc-cache curl|wget)
-# Prints colored, distro-appropriate install commands; exits is handled by caller.
 _print_install_help() {
+  # args: missing deps (e.g., fzf unzip fc-cache curl|wget)
   local missing=("$@")
-
-  # Build per-distro package/attribute lists
   local apt_pkgs=() dnf_pkgs=() pac_pkgs=() nix_attrs=()
 
   for m in "${missing[@]}"; do
@@ -142,14 +100,12 @@ _print_install_help() {
       nix_attrs+=("unzip")
       ;;
     fc-cache)
-      # fc-cache is provided by fontconfig
       apt_pkgs+=("fontconfig")
       dnf_pkgs+=("fontconfig")
       pac_pkgs+=("fontconfig")
       nix_attrs+=("fontconfig")
       ;;
     curl\|wget | curl | wget)
-      # You only need one; show both so the user can choose
       apt_pkgs+=("curl" "wget")
       dnf_pkgs+=("curl" "wget")
       pac_pkgs+=("curl" "wget")
@@ -164,31 +120,26 @@ _print_install_help() {
     esac
   done
 
-  # Deduplicate each list
   local apt_line dnf_line pac_line nix_line
   apt_line="$(_join_unique "${apt_pkgs[@]}")"
   dnf_line="$(_join_unique "${dnf_pkgs[@]}")"
   pac_line="$(_join_unique "${pac_pkgs[@]}")"
   nix_line="$(_join_unique "${nix_attrs[@]}")"
 
-  # Build nix profile refs (nixpkgs#attr)
   local nix_refs=() a
   for a in $nix_line; do nix_refs+=("nixpkgs#$a"); done
 
-  # Detect platform and Nix presence
   _detect_pkg_targets
 
   printf '%s\n' "${RED}${BOLD}Missing dependencies:${RESET} ${missing[*]}" >&2
   echo >&2
 
-  # Show Nix if available (either on NixOS or any system with nix in PATH)
   if [ "$HAS_NIX" -eq 1 ] || [ "$DETECTED" = "nixos" ]; then
     printf '%s\n' "${BOLD}Nix/NixOS${RESET} ${DIM}(detected)${RESET}:" >&2
     printf '  %b\n' "${GREEN}nix profile install ${nix_refs[*]}${RESET}" >&2
     echo >&2
   fi
 
-  # Show only the detected distro; if unknown, show the three common ones
   case "$DETECTED" in
   debian)
     printf '%s\n' "${BOLD}Debian/Ubuntu${RESET} ${DIM}(detected)${RESET}:" >&2
@@ -203,11 +154,10 @@ _print_install_help() {
     printf '  %b\n' "${GREEN}sudo pacman -Syu --needed ${pac_line}${RESET}" >&2
     ;;
   nixos)
-    # Nix command already shown above; no extra system package step
+    # Nix install line already shown above
     :
     ;;
   *)
-    # Unknown distro: show generic instructions for the three main families
     printf '%s\n' "${BOLD}Debian/Ubuntu${RESET}:" >&2
     printf '  %b\n' "${GREEN}sudo apt update && sudo apt install -y ${apt_line}${RESET}" >&2
     echo >&2
@@ -219,7 +169,6 @@ _print_install_help() {
     ;;
   esac
 
-  # Hint when curl|wget is in the missing list
   if printf '%s\n' "${missing[@]}" | grep -q 'curl|wget'; then
     echo >&2
     printf '%s\n' "${DIM}Note: you only need one of 'curl' or 'wget'.${RESET}" >&2
@@ -227,7 +176,7 @@ _print_install_help() {
 }
 
 preflight_check() {
-  # Full set so se comprueban siempre independientemente de la opción
+  # Always check once at startup, regardless of subcommand
   local required=(fzf unzip fc-cache curl\|wget)
   local missing=()
   for dep in "${required[@]}"; do
@@ -242,18 +191,19 @@ preflight_check() {
   fi
 }
 
-# Decide downloader (after preflight guarantees at least one)
+# -------------------- Downloader (no eval) --------------------
 set_downloader() {
   if command -v curl >/dev/null 2>&1; then
-    DL='curl -s -OL'
+    # -f fail on HTTP errors, -S show error, -s silent, -L follow redirects
+    downloader() { curl -fsSL "$1" -o "$2"; }
   elif command -v wget >/dev/null 2>&1; then
-    DL='wget -q'
+    downloader() { wget -qO "$2" "$1"; }
   else
     die "No downloader found (curl/wget)."
   fi
 }
 
-# Help functions
+# -------------------- Help --------------------
 help_global() {
   cat <<EOF
 ${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
@@ -270,8 +220,8 @@ ${BOLD}Global options${RESET}:
   ${GREEN}-h, --help${RESET}              Show this help
 
 ${BOLD}Notes${RESET}:
-  • Fonts directory: \$NERDFONTS_DIR ${DIM}(default: ${HOME}/.fonts)${RESET}
-  • Dependencies: All fonts are downloaded from the official Nerd Fonts site ${DIM}(https://www.nerdfonts.com/font-downloads)${RESET}
+  • Fonts directory: \$NERDFONTS_DIR ${DIM}(default: ${HOME}/.local/share/fonts, or ~/.fonts if present)${RESET}
+  • Downloads from official site: ${DIM}https://www.nerdfonts.com/font-downloads${RESET}
 
 EOF
 }
@@ -291,9 +241,7 @@ help_install() {
 ${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
 
 ${BOLD}Usage${RESET}: $script_name install [FONT...]
-Install one or more Nerd Fonts. If no FONT names are provided, an interactive fzf picker opens
-Fonts are downloaded from the official Nerd Fonts site ${DIM}(https://www.nerdfonts.com/font-downloads)${RESET}
-
+Install one or more Nerd Fonts. If no FONT names are provided, an interactive fzf picker opens.
 
 ${BOLD}Examples${RESET}:
   ${GREEN}$script_name install                    ${RESET}Open fzf and select fonts
@@ -307,7 +255,7 @@ help_uninstall() {
 ${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
 
 ${BOLD}Usage${RESET}: $script_name uninstall [FONT...]
-Uninstall one or more Nerd Fonts. If no names are provided, an interactive fzf picker opens
+Uninstall one or more Nerd Fonts. If no names are provided, an interactive fzf picker opens.
 
 ${BOLD}Examples${RESET}:
   ${GREEN}$script_name uninstall            ${RESET}Open fzf and select installed fonts
@@ -316,14 +264,10 @@ ${BOLD}Examples${RESET}:
 EOF
 }
 
-# Commands
+# -------------------- Commands --------------------
 list_fonts() {
-  if [ ! -d "$fonts_dir" ]; then
-    echo "❌ No fonts directory found at: $fonts_dir."
-    exit 1
-  fi
-  echo "📚 Installed fonts in $fonts_dir:"
-  # GNU find uses -printf; on BSD/macOS you can replace with basename variant.
+  [ -d "$fonts_dir" ] || die "No fonts directory found at: $fonts_dir."
+  info "📚 Installed fonts in $fonts_dir:"
   find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -printf "• ${GREEN}%f${RESET}\n"
 }
 
@@ -332,20 +276,12 @@ load_installed_fonts() {
 }
 
 install_fonts() {
-  # subcommand-specific help
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     help_install
     return 0
   fi
-  shift 0
 
-  require_cmd unzip
-  if command -v curl >/dev/null 2>&1; then
-    DL='curl -s -OL'
-  elif command -v wget >/dev/null 2>&1; then
-    DL='wget -q'
-  else die "Neither 'curl' nor 'wget' is installed."; fi
-
+  set_downloader
   load_installed_fonts
   declare -A is_installed=()
   for f in "${installed_fonts[@]:-}"; do is_installed["$f"]=1; done
@@ -359,99 +295,98 @@ install_fonts() {
       [[ -n "${is_installed[$f]:-}" ]] || candidates+=("$f")
     done
     if [ ${#candidates[@]} -eq 0 ]; then
-      echo "✅ Nothing to install. You're up to date"
+      info "✅ Nothing to install. You're up to date"
       return 0
     fi
-    require_cmd fzf
     selection=$(printf "%s\n" "${candidates[@]}" |
-      fzf "${fzf_args[@]}" --header=$'⬇️ Nerd Fonts Installer\n[Tab] select, [Enter] confirm')
+      fzf "${fzf_args[@]}" --header=$'⬇️ Nerd Fonts Installer\n[Tab] select, [Enter] confirm' ||
+      true)
     [ -n "$selection" ] || {
-      echo "Aborting. ${RED}No font selected${RESET}"
+      error "Aborting. No font selected"
       return 0
     }
   fi
 
   mkdir -p "$fonts_dir"
-
-  while IFS= read -r font_name; do
+  local tmpdir
+  tmpdir="$(mktemp -d)" || die "Cannot create temp dir"
+  # no trap for mac-specific; we'll clean explicitly:
+  for font_name in $selection; do
     [ -n "$font_name" ] || continue
     if [ -d "$fonts_dir/$font_name" ]; then
-      echo "⏭️  $font_name is already installed. Skipping"
+      info "⏭️  $font_name is already installed. Skipping"
       continue
     fi
-    echo "🚀 Installing $font_name Nerd Font..."
-    echo "⬇️  Downloading $font_name.zip..."
-    if ! eval $DL "\"https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip\""; then
-      echo "⚠️  Failed to download ${font_name}.zip. Skipping..."
-      continue
-    fi
-    echo "📦 Unzipping to $fonts_dir/$font_name/"
-    mkdir -p "$fonts_dir/$font_name"
-    if ! unzip -q "$font_name.zip" -d "$fonts_dir/$font_name/"; then
-      echo "⚠️  Failed to unzip ${font_name}.zip. Removing file..."
-      rm -f "$font_name.zip"
-      continue
-    fi
-    rm -f "$font_name.zip"
-    echo "✅ $font_name installed."
-  done <<<"$selection"
+    info "🚀 Installing $font_name Nerd Font..."
+    local url zipfile
+    url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${font_name}.zip"
+    zipfile="$tmpdir/$font_name.zip"
 
-  echo "🔄 Refreshing font cache..."
+    info "⬇️  Downloading $font_name.zip..."
+    if ! downloader "$url" "$zipfile"; then
+      warn "Failed to download ${font_name}.zip. Skipping..."
+      continue
+    fi
+
+    info "📦 Unzipping to $fonts_dir/$font_name/"
+    mkdir -p "$fonts_dir/$font_name"
+    if ! unzip -q "$zipfile" -d "$fonts_dir/$font_name/"; then
+      warn "Failed to unzip ${font_name}.zip. Skipping..."
+      continue
+    fi
+    info "✅ $font_name installed."
+  done
+  rm -rf "$tmpdir"
+
+  info "🔄 Refreshing font cache..."
   if command -v fc-cache >/dev/null 2>&1; then
     fc-cache -f >/dev/null || true
-  else echo "ℹ️ 'fc-cache' not found; you may need to refresh the cache manually"; fi
-  echo "🎉 Installation complete"
+  else warn "'fc-cache' not found; you may need to refresh the cache manually"; fi
+  info "🎉 Installation complete"
 }
 
 uninstall_fonts() {
-  # subcommand-specific help
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     help_uninstall
     return 0
   fi
-  shift 0
 
-  if [ ! -d "$fonts_dir" ]; then
-    echo "❌ No fonts directory found at: $fonts_dir"
-    exit 1
-  fi
+  [ -d "$fonts_dir" ] || die "No fonts directory found at: $fonts_dir"
 
   mapfile -t installed_fonts < <(find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -printf "%f\n")
   if [ ${#installed_fonts[@]} -eq 0 ]; then
-    echo "❌ No installed fonts found in $fonts_dir"
-    exit 1
+    die "No installed fonts found in $fonts_dir"
   fi
 
   local selection
   if [ "$#" -gt 0 ]; then
     selection=$(printf "%s\n" "$@")
   else
-    require_cmd fzf
     selection=$(printf "%s\n" "${installed_fonts[@]}" |
-      fzf --multi --header=$'🗑️ Font Uninstaller\n[Tab] select, [Enter] confirm')
+      fzf --multi --header=$'🗑️ Font Uninstaller\n[Tab] select, [Enter] confirm' ||
+      true)
     [ -n "$selection" ] || {
-      echo "Aborting. ${RED}No font selected${RESET}"
+      error "Aborting. No font selected"
       return 0
     }
   fi
 
-  while IFS= read -r font; do
+  for font in $selection; do
     [ -n "$font" ] || continue
     if [ ! -d "$fonts_dir/$font" ]; then
-      echo "⚠️  $font is not installed. Skipping."
+      warn "$font is not installed. Skipping."
       continue
     fi
-    echo "🗑️  Removing $font from $fonts_dir..."
+    info "🗑️  Removing $font from $fonts_dir..."
     rm -rf "$fonts_dir/$font"
-  done <<<"$selection"
+  done
 
-  echo "🔄 Refreshing font cache..."
+  info "🔄 Refreshing font cache..."
   if command -v fc-cache >/dev/null 2>&1; then fc-cache -f >/dev/null || true; fi
-  echo "✅ Uninstallation complete"
+  info "✅ Uninstallation complete"
 }
 
-# Parse command-line arguments
-# Preflight: comprobar dependencias UNA SOLA VEZ al inicio
+# -------------------- Main --------------------
 preflight_check
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then
@@ -460,8 +395,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then
 fi
 
 cmd="$1"
-shift
-
+shift || true
 case "$cmd" in
 list | l)
   if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -473,9 +407,9 @@ list | l)
 install | i) install_fonts "$@" ;;
 uninstall | u) uninstall_fonts "$@" ;;
 *)
-  echo "Unknown command: $cmd"
-  echo
-  echo "Use ${BOLD}${RED}$script_name -h${RESET} for usage information"
+  error "Unknown command: $cmd"
+  printf '\n' >&2
+  printf '%b\n' "Use ${BOLD}${RED}$script_name -h${RESET} for usage information" >&2
   exit 2
   ;;
 esac
