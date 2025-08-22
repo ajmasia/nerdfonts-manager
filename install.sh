@@ -33,7 +33,7 @@ echo "✅ Installed to $PREFIX/bin/nfm"
 
 # Ask about completion
 echo
-read -r -p "❓ Do you want to install bash-completion for nfm? [y/N] " resp
+read -r -p "❓ Do you want to install bash-completion for nfm? [y/N] " resp </dev/tty
 
 case "$resp" in
 [Yy])
