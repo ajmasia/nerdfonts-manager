@@ -2,7 +2,7 @@
 set -u
 
 GITHUB_USER="ajmasia"
-VERSION="1.3.2"
+VERSION="1.3.3"
 
 # -------------------- Resolve lib path --------------------
 SELF_PATH="$(readlink -f -- "${BASH_SOURCE[0]:-$0}")"

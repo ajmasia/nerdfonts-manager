@@ -12,7 +12,7 @@
       pkgs = import nixpkgs { inherit system; };
 
       pname = "nerdfonts-manager";
-      version = "1.3.2";
+      version = "1.3.3";
 
       # Step 1: Wrap the main script with writeShellApplication.
       # This ensures runtime dependencies (fzf, unzip, wget, curl)
