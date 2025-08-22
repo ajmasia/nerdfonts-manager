@@ -218,10 +218,10 @@ ${BOLD}Commands${RESET}:
   ${GREEN}list, l${RESET}                 List installed fonts
   ${GREEN}install, i${RESET} [FONT...]    Install fonts (interactive if none)
   ${GREEN}uninstall, u${RESET} [FONT...]  Uninstall fonts (interactive if none)
-  ${GREEN}version, v${RESET}              Show script version
 
 ${BOLD}Global options${RESET}:
   ${GREEN}-h, --help${RESET}              Show this help
+  ${GREEN}-v, --version${RESET}           Show version
 
 ${BOLD}Notes${RESET}:
   • Fonts directory: \$NERDFONTS_DIR ${DIM}(default: ${HOME}/.local/share/fonts, or ~/.fonts if present)${RESET}
@@ -408,6 +408,9 @@ preflight_check
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || -z "${1:-}" ]]; then
   help_global
   exit 0
+elif [[ "${1:-}" == "-v" || "${1:-}" == "--version" ]]; then
+  show_version
+  exit 0
 fi
 
 cmd="$1"
@@ -416,7 +419,6 @@ case "$cmd" in
 list | l) list_fonts "$@" ;;
 install | i) install_fonts "$@" ;;
 uninstall | u) uninstall_fonts "$@" ;;
-version | v) show_version ;;
 *)
   error "Unknown command: $cmd"
   printf '\n' >&2
