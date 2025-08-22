@@ -10,7 +10,7 @@ COMPL_FILE="nfm"
 echo "📦 Installing Nerd Font Manager..."
 
 # Detect if we are inside a cloned repo (dev mode)
-if [ -f "./nfm" ] && [ -f "./lib/utils.sh" ]; then
+if [[ -f "./nfm" && -f "./lib/utils.sh" && "$0" != "bash" ]]; then
   echo "🛠️  Installing from local repository..."
   SRC_DIR="$(pwd)"
   DEV_MODE=1
