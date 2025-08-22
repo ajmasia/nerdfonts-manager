@@ -34,7 +34,9 @@ echo "✅ Installed to $PREFIX/bin/nfm"
 # Ask about completion
 echo
 read -r -p "❓ Do you want to install bash-completion for nfm? [y/N] " resp
-if [[ "$resp" =~ ^[Yy]$ ]]; then
+
+case "$resp" in
+[Yy])
   if [ -d "$COMPL_DIR" ]; then
     if [ "$DEV_MODE" -eq 1 ]; then
       if [ -f "$SRC_DIR/contrib/nfm-completion.bash" ]; then
@@ -53,8 +55,10 @@ if [[ "$resp" =~ ^[Yy]$ ]]; then
   else
     echo "⚠️  bash-completion not found (missing $COMPL_DIR)"
   fi
-else
+  ;;
+*)
   echo "⏭️  Skipping completion installation."
-fi
+  ;;
+esac
 
 echo "👉 Run: nfm -h"
