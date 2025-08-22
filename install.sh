@@ -34,9 +34,9 @@ echo -e "✅ Installed to $PREFIX/bin/nfm\n"
 # Install bash-completion (always)
 if [ -d "$COMPL_DIR" ]; then
   if [ "$DEV_MODE" -eq 1 ]; then
-    if [ -f "$SRC_DIR/nfm-completion.bash" ]; then
+    if [ -f "$SRC_DIR/contrib/nfm-completion.bash" ]; then
       echo "⚙️  Installing completion from local repo..."
-      sudo install -m 644 "$SRC_DIR/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
+      sudo install -m 644 "$SRC_DIR/contrib/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
     else
       echo "⚠️  No local completion file found in repo root"
     fi
