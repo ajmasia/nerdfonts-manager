@@ -6,6 +6,8 @@ BIN_PATH="$PREFIX/bin/nfm"
 LIB_DIR="$PREFIX/share/nfm/lib"
 LIB_FILE="$LIB_DIR/utils.sh"
 SHARE_DIR="$PREFIX/share/nfm"
+COMPL_DIR="/etc/bash_completion.d"
+COMPL_FILE="$COMPL_DIR/nfm"
 
 echo "🗑️  Uninstalling Nerd Font Manager..."
 
@@ -33,6 +35,14 @@ fi
 if [ -d "$SHARE_DIR" ] && [ -z "$(ls -A "$SHARE_DIR")" ]; then
   echo "Removing empty directory $SHARE_DIR"
   sudo rmdir "$SHARE_DIR"
+fi
+
+# Remove bash-completion
+if [ -f "$COMPL_FILE" ]; then
+  echo "Removing bash-completion $COMPL_FILE"
+  sudo rm -f "$COMPL_FILE"
+else
+  echo "No bash-completion found at $COMPL_FILE"
 fi
 
 echo "✅ Uninstallation complete"
