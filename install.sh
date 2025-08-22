@@ -31,34 +31,26 @@ sudo install -m 644 "$SRC_DIR/lib/utils.sh" "$PREFIX/share/nfm/lib/utils.sh"
 
 echo "✅ Installed to $PREFIX/bin/nfm"
 
-# Ask about completion
-echo
-read -r -p "❓ Do you want to install bash-completion for nfm? [y/N] " resp </dev/tty
-
-case "$resp" in
-[Yy])
-  if [ -d "$COMPL_DIR" ]; then
-    if [ "$DEV_MODE" -eq 1 ]; then
-      if [ -f "$SRC_DIR/contrib/nfm-completion.bash" ]; then
-        echo "⚙️  Installing completion from local repo..."
-        sudo install -m 644 "$SRC_DIR/contrib/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
-      else
-        echo "⚠️  No local completion file found in contrib/"
-      fi
+# Install bash-completion (always)
+if [ -d "$COMPL_DIR" ]; then
+  if [ "$DEV_MODE" -eq 1 ]; then
+    if [ -f "$SRC_DIR/nfm-completion.bash" ]; then
+      echo "⚙️  Installing completion from local repo..."
+      sudo install -m 644 "$SRC_DIR/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
     else
-      echo "⬇️  Downloading completion script..."
-      curl -fsSL "https://raw.githubusercontent.com/$REPO/main/contrib/nfm-completion.bash" |
-        sudo tee "$COMPL_DIR/$COMPL_FILE" >/dev/null
+      echo "⚠️  No local completion file found in repo root"
     fi
-    echo "✅ Completion installed at $COMPL_DIR/$COMPL_FILE"
-    echo "👉 Restart your shell or run: source $COMPL_DIR/$COMPL_FILE"
   else
-    echo "⚠️  bash-completion not found (missing $COMPL_DIR)"
+    echo "⬇️  Downloading completion script..."
+    curl -fsSL "https://raw.githubusercontent.com/$REPO/main/nfm-completion.bash" |
+      sudo tee "$COMPL_DIR/$COMPL_FILE" >/dev/null
   fi
-  ;;
-*)
-  echo "⏭️  Skipping completion installation."
-  ;;
-esac
 
-echo "👉 Run: nfm -h"
+  echo "✅ Completion installed at $COMPL_DIR/$COMPL_FILE"
+  echo "👉 Restart your shell or run: source $COMPL_DIR/$COMPL_FILE"
+  echo "ℹ️  To uninstall completion: sudo rm $COMPL_DIR/$COMPL_FILE"
+else
+  echo "⚠️  bash-completion not found (missing $COMPL_DIR)"
+fi
+
+echo "👉 Run: nfm -h to start using Nerd Font Manager"
