@@ -2,7 +2,7 @@
 set -u
 
 GITHUB_USER="ajmasia"
-VERSION="1.2.1"
+VERSION="1.2.2"
 
 # -------------------- Resolve lib path --------------------
 SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"

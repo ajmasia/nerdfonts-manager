@@ -13,6 +13,7 @@ echo "📦 Installing Nerd Font Manager..."
 if [ -f "./nfm" ] && [ -f "./lib/utils.sh" ]; then
   echo "🛠️  Installing from local repository..."
   SRC_DIR="$(pwd)"
+  DEV_MODE=1
 else
   echo "🌐 Downloading from GitHub..."
   tmpdir="$(mktemp -d)"
@@ -20,6 +21,7 @@ else
   curl -fsSL "https://github.com/$REPO/archive/refs/heads/main.tar.gz" |
     tar -xz -C "$tmpdir"
   SRC_DIR="$tmpdir/nerdfonts-manager-main"
+  DEV_MODE=0
 fi
 
 # Install binary and library
@@ -32,12 +34,15 @@ echo "✅ Installed to $PREFIX/bin/nfm"
 # Ask about completion
 echo
 read -r -p "❓ Do you want to install bash-completion for nfm? [y/N] " resp
-
 if [[ "$resp" =~ ^[Yy]$ ]]; then
   if [ -d "$COMPL_DIR" ]; then
-    if [ -f "$SRC_DIR/contrib/nfm-completion.bash" ]; then
-      echo "⚙️  Installing completion from local repo..."
-      sudo install -m 644 "$SRC_DIR/contrib/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
+    if [ "$DEV_MODE" -eq 1 ]; then
+      if [ -f "$SRC_DIR/contrib/nfm-completion.bash" ]; then
+        echo "⚙️  Installing completion from local repo..."
+        sudo install -m 644 "$SRC_DIR/contrib/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
+      else
+        echo "⚠️  No local completion file found in contrib/"
+      fi
     else
       echo "⬇️  Downloading completion script..."
       curl -fsSL "https://raw.githubusercontent.com/$REPO/main/contrib/nfm-completion.bash" |
