@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -u
 
+GITHUB_USER="ajmasia"
+VERSION="1.0.0"
+
 # -------------------- Resolve lib path --------------------
 SELF_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
@@ -206,7 +209,7 @@ set_downloader() {
 # -------------------- Help --------------------
 help_global() {
   cat <<EOF
-${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET}
+${BOLD}${CYAN}Nerd Font Manager (nfm)${RESET} v$VERSION
 
 ${BOLD}Usage${RESET}:
   $script_name ${GREEN}<command>${RESET} [args]  ${DIM}(use -h for command help)${RESET}
@@ -215,6 +218,7 @@ ${BOLD}Commands${RESET}:
   ${GREEN}list, l${RESET}                 List installed fonts
   ${GREEN}install, i${RESET} [FONT...]    Install fonts (interactive if none)
   ${GREEN}uninstall, u${RESET} [FONT...]  Uninstall fonts (interactive if none)
+  ${GREEN}version, v${RESET}              Show script version
 
 ${BOLD}Global options${RESET}:
   ${GREEN}-h, --help${RESET}              Show this help
@@ -222,6 +226,10 @@ ${BOLD}Global options${RESET}:
 ${BOLD}Notes${RESET}:
   • Fonts directory: \$NERDFONTS_DIR ${DIM}(default: ${HOME}/.local/share/fonts, or ~/.fonts if present)${RESET}
   • Downloads from official site: ${DIM}https://www.nerdfonts.com/font-downloads${RESET}
+
+${BOLD}Uninstall${RESET}:
+  To remove Nerd Font Manager from your system, run:
+    ${DIM}curl -fsSL https://raw.githubusercontent.com/$GITHUB_USER/nerdfonts-manager/main/uninstall.sh | bash${RESET}
 
 EOF
 }
@@ -265,7 +273,15 @@ EOF
 }
 
 # -------------------- Commands --------------------
+show_version() {
+  echo "Nerd Font Manager (nfm) v$VERSION"
+}
+
 list_fonts() {
+  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    help_list
+    exit 0
+  fi
   [ -d "$fonts_dir" ] || die "No fonts directory found at: $fonts_dir."
   info "📚 Installed fonts in $fonts_dir:"
   find "$fonts_dir" -mindepth 1 -maxdepth 1 -type d -printf "• ${GREEN}%f${RESET}\n"
@@ -397,15 +413,10 @@ fi
 cmd="$1"
 shift || true
 case "$cmd" in
-list | l)
-  if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    help_list
-    exit 0
-  fi
-  list_fonts
-  ;;
+list | l) list_fonts "$@" ;;
 install | i) install_fonts "$@" ;;
 uninstall | u) uninstall_fonts "$@" ;;
+version | v) show_version ;;
 *)
   error "Unknown command: $cmd"
   printf '\n' >&2
