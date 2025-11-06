@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
 
 GITHUB_USER="ajmasia"
@@ -7,50 +8,90 @@ PREFIX="/usr/local"
 COMPL_DIR="/etc/bash_completion.d"
 COMPL_FILE="nfm"
 
-echo "📦 Installing Nerd Font Manager..."
+# --- Argument handling ---
+SILENT=0
+for arg in "$@"; do
+  case "$arg" in
+  --silent | -s)
+    SILENT=1
+    shift
+    ;;
+  esac
+done
 
-# Detect if we are inside a cloned repo (dev mode)
+# --- Logging helpers ---
+log() {
+  # Regular message (only shown if not silent)
+  if [[ $SILENT -eq 0 ]]; then
+    echo -e "$@"
+  fi
+}
+
+always() {
+  # Always show this message, even in silent mode
+  echo -e "$@"
+}
+
+always "📦 Installing Nerd Font Manager..."
+
+# --- Check if already installed ---
+if command -v nfm >/dev/null 2>&1; then
+  EXISTING_PATH="$(command -v nfm)"
+  always "⚠️  'nfm' is already installed at: $EXISTING_PATH"
+  always "ℹ️  To reinstall, remove it first with: sudo rm -f $EXISTING_PATH"
+  exit 0
+fi
+
+# --- Detect if running in local (dev) mode ---
 if [[ -f "./nfm" && -f "./lib/utils.sh" && "$0" != "bash" ]]; then
-  echo "🛠️  Installing from local repository..."
+  log "🛠️  Installing from local repository..."
   SRC_DIR="$(pwd)"
   DEV_MODE=1
 else
-  echo "🌐 Downloading from GitHub..."
+  log "🌐 Downloading from GitHub..."
   tmpdir="$(mktemp -d)"
   trap 'rm -rf "$tmpdir"' EXIT
-  curl -fsSL "https://github.com/$REPO/archive/refs/heads/main.tar.gz" |
-    tar -xz -C "$tmpdir"
+  if ! curl -fsSL "https://github.com/$REPO/archive/refs/heads/main.tar.gz" | tar -xz -C "$tmpdir"; then
+    always "❌ Installation failed: unable to download repository."
+    exit 1
+  fi
   SRC_DIR="$tmpdir/nerdfonts-manager-main"
   DEV_MODE=0
 fi
 
-# Install binary and library
-sudo mkdir -p "$PREFIX/bin" "$PREFIX/share/nfm/lib"
-sudo install -m 755 "$SRC_DIR/nfm" "$PREFIX/bin/nfm"
-sudo install -m 644 "$SRC_DIR/lib/utils.sh" "$PREFIX/share/nfm/lib/utils.sh"
+# --- Install binary and library ---
+if ! sudo mkdir -p "$PREFIX/bin" "$PREFIX/share/nfm/lib"; then
+  always "❌ Installation failed: unable to create target directories."
+  exit 1
+fi
 
-echo -e "✅ Installed to $PREFIX/bin/nfm\n"
+if ! sudo install -m 755 "$SRC_DIR/nfm" "$PREFIX/bin/nfm"; then
+  always "❌ Installation failed: could not install binary."
+  exit 1
+fi
 
-# Install bash-completion (always)
+if ! sudo install -m 644 "$SRC_DIR/lib/utils.sh" "$PREFIX/share/nfm/lib/utils.sh"; then
+  always "❌ Installation failed: could not install library."
+  exit 1
+fi
+
+# --- Bash completion ---
 if [ -d "$COMPL_DIR" ]; then
   if [ "$DEV_MODE" -eq 1 ]; then
     if [ -f "$SRC_DIR/contrib/nfm-completion.bash" ]; then
-      echo "⚙️  Installing completion from local repo..."
+      log "⚙️  Installing completion from local repo..."
       sudo install -m 644 "$SRC_DIR/contrib/nfm-completion.bash" "$COMPL_DIR/$COMPL_FILE"
     else
-      echo "⚠️  No local completion file found in repo root"
+      log "⚠️  No local completion file found in repository root"
     fi
   else
-    echo "⬇️  Downloading completion script..."
+    log "⬇️  Downloading completion script..."
     curl -fsSL "https://raw.githubusercontent.com/ajmasia/nerdfonts-manager/main/contrib/nfm-completion.bash" |
       sudo tee "$COMPL_DIR/$COMPL_FILE" >/dev/null
   fi
-
-  echo "✅ Completion installed at $COMPL_DIR/$COMPL_FILE"
-  echo -e "\n👉 Restart your shell or run: source $COMPL_DIR/$COMPL_FILE"
-  echo "ℹ️  To uninstall completion: sudo rm $COMPL_DIR/$COMPL_FILE"
 else
-  echo "⚠️  bash-completion not found (missing $COMPL_DIR)"
+  log "⚠️  bash-completion directory not found ($COMPL_DIR)"
 fi
 
-echo -e "\n👉 Run: nfm -h to start using Nerd Font Manager"
+always "✅ Installation completed successfully!"
+log "\n👉 Run: nfm -h to start using Nerd Font Manager"
