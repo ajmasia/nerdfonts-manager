@@ -8,6 +8,22 @@ PREFIX="/usr/local"
 COMPL_DIR="/etc/bash_completion.d"
 COMPL_FILE="nfm"
 
+# logger
+BOLD="\033[1m"
+BLUE="\033[34m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+RED="\033[31m"
+MAGENTA="\033[35m"
+CYAN="\033[36m"
+RESET="\033[0m"
+
+success() { printf "${BOLD}${GREEN}${RESET} %s\n" "$*"; }
+running() { printf "${BOLD}${MAGENTA}${RESET} %s\n" "$*"; }
+info() { printf "${BOLD}${CYAN}${RESET} %s\n" "$*"; }
+warn() { printf "${BOLD}${YELLOW}${RESET} %s\n" "$*"; }
+err() { printf "${BOLD}${RED}󰅙${RESET} %s\n" "$*" >&2; }
+
 # --- Argument handling ---
 SILENT=0
 for arg in "$@"; do
@@ -32,13 +48,13 @@ always() {
   echo -e "$@"
 }
 
-always "📦 Installing Nerd Font Manager..."
+always "${MAGENTA}${RESET} Installing Nerd Font Manager..."
 
 # --- Check if already installed ---
 if command -v nfm >/dev/null 2>&1; then
   EXISTING_PATH="$(command -v nfm)"
-  always "⚠️  'nfm' is already installed at: $EXISTING_PATH"
-  always "ℹ️  To reinstall, remove it first with: sudo rm -f $EXISTING_PATH"
+  always "${BOLD}${BLUE}${RESET} Already installed at: $EXISTING_PATH"
+  always "${BOLD}${BLUE}${RESET} To reinstall, remove using unistall script"
   exit 0
 fi
 
