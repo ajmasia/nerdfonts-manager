@@ -109,5 +109,5 @@ else
   log "⚠️  bash-completion directory not found ($COMPL_DIR)"
 fi
 
-always "✅ Installation completed successfully!"
+always "${BOLD}${GREEN}${RESET} Installation completed successfully!"
 log "\n👉 Run: nfm -h to start using Nerd Font Manager"
